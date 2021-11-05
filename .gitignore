@@ -22,3 +22,5 @@ dist
 MANIFEST
 build
 tmp
+
+.idea

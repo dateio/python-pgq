@@ -43,6 +43,8 @@ class CascadedConsumer(BaseConsumer):
                      help="change queue position according to destination")
         p.add_option("--reset", action="store_true",
                      help="reset queue position on destination side")
+        p.add_option("--set-tick", action = "store",
+                     help = "set queue position in both provider subscription table and consumer (destination) node table")
         return p
 
     def startup(self):
@@ -51,6 +53,9 @@ class CascadedConsumer(BaseConsumer):
             sys.exit(0)
         if self.options.reset:
             self.dst_reset()
+            sys.exit(0)
+        if self.options.set_tick:
+            self.set_tick(self.options.set_tick)
             sys.exit(0)
         return super().startup()
 
@@ -158,6 +163,26 @@ class CascadedConsumer(BaseConsumer):
         q = "select * from pgq_node.set_consumer_completed(%s, %s, %s)"
         dst_curs.execute(q, [self.queue_name, self.consumer_name, last_tick])
         dst_db.commit()
+
+    def set_tick(self, tick):
+        state = self.get_consumer_state()
+        orig_dst_tick = state['completed_tick']
+        self.log.info("Setting queue position from tick %d to %s" % (orig_dst_tick, tick))
+
+        dst_db = self.get_database(self.target_db)
+        dst_curs = dst_db.cursor()
+
+        q = "select * from pgq_node.set_consumer_completed(%s, %s, %s)"
+        dst_curs.execute(q, [self.queue_name, self.consumer_name, tick])
+
+        src_db = self.get_provider_db(state)
+        src_curs = src_db.cursor()
+
+        q = "select pgq.register_consumer_at(%s, %s, %s)"
+        src_curs.execute(q, [self.queue_name, self.consumer_name, tick])
+
+        dst_db.commit()
+        src_db.commit()
 
     def process_batch(self, src_db, batch_id, event_list):
         state = self._consumer_state

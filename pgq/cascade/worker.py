@@ -145,7 +145,7 @@ class CascadedWorker(CascadedConsumer):
         dst_curs = dst_db.cursor()
         for ev in event_list:
             if st.copy_events:
-                self.copy_event(dst_curs, ev, st.filtered_copy)
+                self.copy_event(src_curs, dst_curs, ev, st.filtered_copy)
             if ev.ev_type.split('.', 1)[0] in ("pgq", "londiste"):
                 # process cascade events even on waiting leaf node
                 self.process_remote_event(src_curs, dst_curs, ev)
@@ -384,7 +384,7 @@ class CascadedWorker(CascadedConsumer):
         dst_curs.execute(q, [self.pgq_queue_name, tick_id, tick_time, self.cur_max_id])
         dst_db.set_isolation_level(ilev)
 
-    def copy_event(self, dst_curs, ev, filtered_copy):
+    def copy_event(self, src_curs, dst_curs, ev, filtered_copy):
         """Add event to copy buffer.
         """
         if not self.main_worker:
