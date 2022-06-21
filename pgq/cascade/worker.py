@@ -140,6 +140,8 @@ class CascadedWorker(CascadedConsumer):
         if self._worker_state.wait_behind:
             self.wait_for_tick(dst_db, tick_id)
 
+        self.wait_after_tick(dst_db, tick_id)
+
         st = self._worker_state
         src_curs = src_db.cursor()
         dst_curs = dst_db.cursor()
@@ -442,4 +444,23 @@ class CascadedWorker(CascadedConsumer):
         dst_curs.execute(q, [self.pgq_queue_name])
         dst_db.commit()
         self.global_wm_publish_time = t
+
+    def wait_after_tick(self, dst_db, tick_id):
+        first_time = True
+        while True:
+            st = self._worker_state
+            if not 'wait-after' in st.node_attrs:
+                return
+            wait_after = int(st.node_attrs['wait-after'])
+            # don't process events after pause tick (wait)
+            if tick_id <= wait_after:
+                return
+            msg = 'Consumer has wait_after=%d set, current tick %d, waiting' % (wait_after, tick_id)
+            if first_time:
+                self.log.info(msg)
+            else:
+                self.log.debug(msg)
+            first_time = False
+            time.sleep(self.loop_delay)
+            self._consumer_state = self.refresh_state(dst_db)
 
